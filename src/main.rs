@@ -10,10 +10,11 @@ use safe_drive::{
     pr_fatal, pr_info,
     selector::Selector,
     service::client::Client,
-    topic::{publisher::Publisher, subscriber::Subscriber},
+    topic::{publisher::{self, Publisher}, subscriber::Subscriber},
     RecvResult,
 };
 use std::{rc::Rc, time::Duration};
+use drobo_interfaces::msg::MdLibMsg;
 
 pub mod DualsenseState {
     pub const SQUARE: usize = 0;
@@ -38,117 +39,103 @@ fn main() -> Result<(), DynError> {
     let node = ctx.create_node("controller_2023_a", None, Default::default())?;
 
     let selector = ctx.create_selector()?;
-    let selector_client = ctx.create_selector()?;
     let subscriber = node.create_subscriber::<sensor_msgs::msg::Joy>("joy", None)?;
+    let publisher = node.create_publisher::<drobo_interfaces::msg::MdLibMsg>("md_driver_topic", None)?;
 
-    let demeter_publisher = node.create_publisher::<std_msgs::msg::Int8>("demeter_oracle", None)?;
-    let sr_publisher = node.create_publisher::<std_msgs::msg::Bool>("sr_driver_topic", None)?;
-    let support_wheel_publisher =
-        node.create_publisher::<std_msgs::msg::Int32>("support_drive_topic", None)?;
-    // let client = node.create_client::<drobo_interfaces::srv::SolenoidStateSrv>(
-    //     "solenoid_order",
-    //     Default::default(),
-    // )?;
+
 
     worker(
         selector,
-        selector_client,
         subscriber,
-        demeter_publisher,
-        support_wheel_publisher,
-        sr_publisher
-        // client,
+        publisher
     )?;
     Ok(())
 }
 
 fn worker(
     mut selector: Selector,
-    mut selector_client: Selector,
     subscriber: Subscriber<sensor_msgs::msg::Joy>,
-    demeter_publisher: Publisher<std_msgs::msg::Int8>,
-    support_wheel_publisher: Publisher<std_msgs::msg::Int32>,
-    sr_publisher: Publisher<std_msgs::msg::Bool>
-    // client: Client<drobo_interfaces::srv::SolenoidStateSrv>,
+    publisher:Publisher<MdLibMsg>
 ) -> Result<(), DynError> {
     let mut p9n = p9n_interface::PlaystationInterface::new(sensor_msgs::msg::Joy::new().unwrap());
-    // let mut client = Some(client);
     let logger = Rc::new(Logger::new("controller_2023"));
-    let logger2 = logger.clone();
-    let mut dualsense_state: [bool; 15] = [false; 15];
-    let mut sr_state = true;
-    let mut support_wheel_prioritize = 0; // 1: 前, -1: 後ろ
+
     selector.add_subscriber(
         subscriber,
         Box::new(move |_msg| {
             p9n.set_joy_msg(_msg.get_owned().unwrap());
 
-            if p9n.pressed_start() && !dualsense_state[DualsenseState::START] {
-                dualsense_state[DualsenseState::START] = true;
-                let mut msg = std_msgs::msg::Bool::new().unwrap();
-                msg.data = !sr_state;
-                sr_publisher.send(&msg).unwrap();
-                sr_state ^= true;
-            }
-            if !p9n.pressed_start() && dualsense_state[DualsenseState::START] {
-                dualsense_state[DualsenseState::START] = false;
-            }
-            //  && !dualsense_state[DualsenseState::L1] 
-            if p9n.pressed_l1(){
-                pr_info!(logger, "L1");
-            }
+            // if p9n.pressed_l1(){
+            //     pr_info!(logger, "L1");
+            // }
             
-            // && dualsense_state[DualsenseState::L1]
-            if !p9n.pressed_l1()  {
-                pr_info!(logger, "L1f");
-            }
-            // && !dualsense_state[DualsenseState::R1] 
-            if p9n.pressed_r1() {
-                pr_info!(logger, "r1");
-            }
-            // && dualsense_state[DualsenseState::R1] 
-            if !p9n.pressed_r1() {
-                pr_info!(logger, "r1f");
-            }
+            // // && dualsense_state[DualsenseState::L1]
+            // if !p9n.pressed_l1()  {
+            //     pr_info!(logger, "L1f");
+            // }
+            // // && !dualsense_state[DualsenseState::R1] 
+            // if p9n.pressed_r1() {
+            //     pr_info!(logger, "r1");
+            // }
+            // // && dualsense_state[DualsenseState::R1] 
+            // if !p9n.pressed_r1() {
+            //     pr_info!(logger, "r1f");
+            // }
             
-            /*
-            if p9n.pressed_l2() {
-                pr_info!(logger, "収穫機構: 上昇！");
-            }
-            if !p9n.pressed_l2() && dualsense_state[DualsenseState::L2] {
-                pr_info!(logger, "収穫機構: 上昇！");
-            }
+            
+            // if p9n.pressed_l2() {
+            //     pr_info!(logger, "収穫機構: 上昇！");
+            // }
+            // if !p9n.pressed_l2() && dualsense_state[DualsenseState::L2] {
+                
+            // }
+
+
             if p9n.pressed_r2() {
-                pr_info!(logger, "収穫機構: 上昇！");
+                send_pwm(4,0,true,50,&publisher)
+
             }
-            if !p9n.pressed_r2() && dualsense_state[DualsenseState::R2] {
-                pr_info!(logger, "収穫機構: 上昇！");
+            if !p9n.pressed_r2() {
+                send_pwm(4,0,true,0,&publisher)
             }
 
-            if p9n.pressed_dpad_left() && !dualsense_state[DualsenseState::D_PAD_LEFT] {
-                pr_info!(logger, "収穫機構: 上昇！");
-            }
-            if !p9n.pressed_dpad_left() && dualsense_state[DualsenseState::D_PAD_LEFT] {
-                pr_info!(logger, "収穫機構: 上昇！");
-            }
 
-            if p9n.pressed_dpad_up() && !dualsense_state[DualsenseState::D_PAD_UP] {
-                pr_info!(logger, "収穫機構: 上昇！");
-            }
-            if !p9n.pressed_dpad_up() && dualsense_state[DualsenseState::D_PAD_UP] {
-                pr_info!(logger, "収穫機構: 上昇！");
-            }
+            // if p9n.pressed_dpad_left() && !dualsense_state[DualsenseState::D_PAD_LEFT] {
+            //     pr_info!(logger, "収穫機構: 上昇！");
+            // }
+            // if !p9n.pressed_dpad_left() && dualsense_state[DualsenseState::D_PAD_LEFT] {
+            //     pr_info!(logger, "収穫機構: 上昇！");
+            // }
 
-            if p9n.pressed_dpad_right() && !dualsense_state[DualsenseState::D_PAD_RIGHT] {
-                pr_info!(logger, "収穫機構: 上昇！");
-            }
-            if !p9n.pressed_dpad_right() && dualsense_state[DualsenseState::D_PAD_RIGHT] {
-                pr_info!(logger, "収穫機構: 上昇！");
-            }
-            */
+            // if p9n.pressed_dpad_up() && !dualsense_state[DualsenseState::D_PAD_UP] {
+            //     pr_info!(logger, "収穫機構: 上昇！");
+            // }
+            // if !p9n.pressed_dpad_up() && dualsense_state[DualsenseState::D_PAD_UP] {
+            //     pr_info!(logger, "収穫機構: 上昇！");
+            // }
+
+            // if p9n.pressed_dpad_right() && !dualsense_state[DualsenseState::D_PAD_RIGHT] {
+            //     pr_info!(logger, "収穫機構: 上昇！");
+            // }
+            // if !p9n.pressed_dpad_right() && dualsense_state[DualsenseState::D_PAD_RIGHT] {
+            //     pr_info!(logger, "収穫機構: 上昇！");
+            // }
+            
         }),
     );
     loop {
         selector.wait()?;
     }
+}
+
+fn send_pwm(_address:u32, _semi_id:u32,_phase:bool,_power:u32,publisher:&Publisher<MdLibMsg>){
+    let mut msg = drobo_interfaces::msg::MdLibMsg::new().unwrap();
+    msg.address = _address as u8;
+    msg.semi_id = _semi_id as u8;
+    msg.mode = 2 as u8; //MotorLibのPWMモードに倣いました
+    msg.phase = _phase as bool;
+    msg.power = _power as u16;
+
+    publisher.send(&msg).unwrap()
+
 }
