@@ -29,13 +29,16 @@ impl PlaystationInterface {
         self.msg.buttons.as_slice()[BUTTONS_DUALSENSE::R2] == 1
     }
     pub fn pressed_dpad_left(&self) -> bool {
-         self.msg.axes.as_slice()[AXES_DUALSENSE::DPAD_X] > 0.0
+        self.msg.axes.as_slice()[AXES_DUALSENSE::DPAD_X] > 0.0
     }
     pub fn pressed_dpad_up(&self) -> bool {
         self.msg.axes.as_slice()[AXES_DUALSENSE::DPAD_Y] > 0.0
     }
     pub fn pressed_dpad_right(&self) -> bool {
         self.msg.axes.as_slice()[AXES_DUALSENSE::DPAD_X] < 0.0
+    }
+    pub fn pressed_dpad_down(&self) -> bool {
+        self.msg.axes.as_slice()[AXES_DUALSENSE::DPAD_Y] < 0.0
     }
     pub fn pressed_l2_analog(&self) -> f32 {
         self.msg.axes.as_slice()[AXES_DUALSENSE::L2]

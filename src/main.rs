@@ -6,15 +6,25 @@ use safe_drive::{
     context::Context,
     error::DynError,
     logger::Logger,
-    msg::common_interfaces::{sensor_msgs, std_msgs},
+    msg::common_interfaces::{sensor_msgs, std_msgs::{self, msg::Bool}},
     pr_fatal, pr_info,
     selector::Selector,
     service::client::Client,
     topic::{publisher::{self, Publisher}, subscriber::Subscriber},
     RecvResult,
 };
+
+
 use std::{rc::Rc, time::Duration};
 use drobo_interfaces::msg::MdLibMsg;
+
+enum CANNON {
+    R = 4,
+    L = 5,
+}
+
+const RECOVERY:u8 = 6;
+const ISOLATION:u8 = 7;
 
 pub mod DualsenseState {
     pub const SQUARE: usize = 0;
@@ -58,69 +68,39 @@ fn worker(
     publisher:Publisher<MdLibMsg>
 ) -> Result<(), DynError> {
     let mut p9n = p9n_interface::PlaystationInterface::new(sensor_msgs::msg::Joy::new().unwrap());
-    let logger = Rc::new(Logger::new("controller_2023"));
+    // let logger = Rc::new(Logger::new("controller_2023"));
 
     selector.add_subscriber(
         subscriber,
         Box::new(move |_msg| {
             p9n.set_joy_msg(_msg.get_owned().unwrap());
 
-            // if p9n.pressed_l1(){
-            //     pr_info!(logger, "L1");
-            // }
-            
-            // // && dualsense_state[DualsenseState::L1]
-            // if !p9n.pressed_l1()  {
-            //     pr_info!(logger, "L1f");
-            // }
-            // // && !dualsense_state[DualsenseState::R1] 
-            // if p9n.pressed_r1() {
-            //     pr_info!(logger, "r1");
-            // }
-            // // && dualsense_state[DualsenseState::R1] 
-            // if !p9n.pressed_r1() {
-            //     pr_info!(logger, "r1f");
-            // }
-            
-            
-            // if p9n.pressed_l2() {
-            //     pr_info!(logger, "収穫機構: 上昇！");
-            // }
-            // if !p9n.pressed_l2() && dualsense_state[DualsenseState::L2] {
-                
-            // }
-
-
             if p9n.pressed_r2() {
-                send_pwm(4,0,true,50,&publisher)
-
+                cannon_controller(500,true,&publisher);
             }
             if !p9n.pressed_r2() {
-                send_pwm(4,0,true,0,&publisher)
+                cannon_controller(0,false,&publisher);
             }
 
 
-            // if p9n.pressed_dpad_left() && !dualsense_state[DualsenseState::D_PAD_LEFT] {
-            //     pr_info!(logger, "収穫機構: 上昇！");
-            // }
-            // if !p9n.pressed_dpad_left() && dualsense_state[DualsenseState::D_PAD_LEFT] {
-            //     pr_info!(logger, "収穫機構: 上昇！");
-            // }
+            if p9n.pressed_r1() {
+                recovery_controller(999,true,&publisher);
+            }
+            if !p9n.pressed_r1() {
+                recovery_controller(0,false,&publisher);
+            }
 
-            // if p9n.pressed_dpad_up() && !dualsense_state[DualsenseState::D_PAD_UP] {
-            //     pr_info!(logger, "収穫機構: 上昇！");
-            // }
-            // if !p9n.pressed_dpad_up() && dualsense_state[DualsenseState::D_PAD_UP] {
-            //     pr_info!(logger, "収穫機構: 上昇！");
-            // }
 
-            // if p9n.pressed_dpad_right() && !dualsense_state[DualsenseState::D_PAD_RIGHT] {
-            //     pr_info!(logger, "収穫機構: 上昇！");
-            // }
-            // if !p9n.pressed_dpad_right() && dualsense_state[DualsenseState::D_PAD_RIGHT] {
-            //     pr_info!(logger, "収穫機構: 上昇！");
-            // }
-            
+
+            if p9n.pressed_dpad_down(){
+                isolation_controller(500,true,&publisher);
+            }
+            if !p9n.pressed_dpad_down(){
+                isolation_controller(0,true,&publisher);
+            }
+
+
+
         }),
     );
     loop {
@@ -128,7 +108,48 @@ fn worker(
     }
 }
 
-fn send_pwm(_address:u32, _semi_id:u32,_phase:bool,_power:u32,publisher:&Publisher<MdLibMsg>){
+
+fn cannon_controller(power:u16,mode:bool,publisher:&Publisher<MdLibMsg>){
+
+    if mode {
+        send_pwm(CANNON::R as u8,0,false,power,&publisher);
+        send_pwm(CANNON::L as u8,0,true,power,&publisher);
+
+        return;
+
+    }
+
+    send_pwm(CANNON::R as u8,0,true,0,&publisher);
+    send_pwm(CANNON::L as u8,0,true,0,&publisher);
+}
+
+
+fn recovery_controller(power:u16,mode:bool,publisher:&Publisher<MdLibMsg>){
+
+    if mode {
+        send_pwm(RECOVERY,0,true,power,&publisher);
+        return;
+
+    }
+
+    send_pwm(RECOVERY,0,true,0,&publisher);
+
+}
+
+fn isolation_controller(power:u16,mode:bool,publisher:&Publisher<MdLibMsg>){
+
+    if mode {
+        send_pwm(ISOLATION,0,true,power,&publisher);
+        return;
+
+    }
+
+    send_pwm(ISOLATION,0,true,0,&publisher);
+
+}
+
+
+fn send_pwm(_address:u8, _semi_id:u8,_phase:bool,_power:u16,publisher:&Publisher<MdLibMsg>){
     let mut msg = drobo_interfaces::msg::MdLibMsg::new().unwrap();
     msg.address = _address as u8;
     msg.semi_id = _semi_id as u8;
