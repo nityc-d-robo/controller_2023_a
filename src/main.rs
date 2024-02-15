@@ -82,7 +82,7 @@ fn worker(
             p9n.set_joy_msg(_msg.get_owned().unwrap());
 
             if p9n.pressed_r2() {
-                cannon_controller(500,true,&publisher_md);
+                cannon_controller(400,true,&publisher_md);
             }
             if !p9n.pressed_r2() {
                 cannon_controller(0,false,&publisher_md);
@@ -91,7 +91,7 @@ fn worker(
 
             if p9n.pressed_r1() {
 
-                recovery_controller(400,true,&publisher_md);
+                recovery_controller(450,true,&publisher_md);
             }
             if !p9n.pressed_r1() {
                 recovery_controller(0,false,&publisher_md);
@@ -100,14 +100,18 @@ fn worker(
 
 
             if p9n.pressed_dpad_down(){
-                isolation_controller(500,true,&publisher_md);
+                isolation_controller(500,true,true,&publisher_md);
             }
-            if !p9n.pressed_dpad_down(){
-                isolation_controller(0,true,&publisher_md);
+            else if  p9n.pressed_dpad_up(){
+                
+                isolation_controller(500,true,false,&publisher_md);
+            }
+            else if !p9n.pressed_dpad_up() && !p9n.pressed_dpad_down(){
+                isolation_controller(0,true,false,&publisher_md);
             }
 
 
- 
+
 
             if p9n.pressed_dpad_left()  && charge_state{
                 charge_contorller(&publisher_msd);
@@ -158,10 +162,10 @@ fn recovery_controller(power:u16,mode:bool,publisher_md:&Publisher<MdLibMsg>){
 }
 
 
-fn isolation_controller(power:u16,mode:bool,publisher_md:&Publisher<MdLibMsg>){
+fn isolation_controller(power:u16,mode:bool,phase:bool,publisher_md:&Publisher<MdLibMsg>){
 
     if mode {
-        send_pwm(ISOLATION,0,true,power,&publisher_md);
+        send_pwm(ISOLATION,0,phase,power,&publisher_md);
         return;
 
     }
