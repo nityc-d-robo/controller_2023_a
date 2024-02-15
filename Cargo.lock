@@ -305,3 +305,7 @@ version = "0.1.0"
 [[patch.unused]]
 name = "omni_control"
 version = "0.1.0"
+
+[[patch.unused]]
+name = "servo_atonement"
+version = "0.1.0"
