@@ -114,7 +114,7 @@ fn worker(
             p9n.set_joy_msg(_msg.get_owned().unwrap());
 
             if p9n.pressed_r2() {
-                cannon_controller(400,true,&publisher_md);
+                cannon_controller(450,true,&publisher_md);
             }
             if !p9n.pressed_r2() {
                 cannon_controller(0,false,&publisher_md);
