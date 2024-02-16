@@ -1,7 +1,6 @@
 mod p9n_interface;
 mod ps5_dualsense;
 
-// use drobo_interfaces::srv::{SolenoidStateSrv_Request, SolenoidStateSrv_Response};
 use safe_drive::{
     context::Context,
     error::DynError,
@@ -12,7 +11,6 @@ use safe_drive::{
     service::client::Client,
     topic::{publisher::{self, Publisher}, subscriber::Subscriber},
     RecvResult,
-    msg::common_interfaces::geometry_msgs::msg::Twist
 };
 use crate::std_msgs::msg;
 use std::{rc::Rc, time::Duration};
@@ -86,7 +84,6 @@ fn main() -> Result<(), DynError> {
     let subscriber = node.create_subscriber::<sensor_msgs::msg::Joy>("joy", None)?;
     let publisher_msd = node.create_publisher::<msg::Bool>("servo_atonement_topic", None)?;
     let publisher_md = node.create_publisher::<drobo_interfaces::msg::MdLibMsg>("md_driver_topic", None)?;
-    let publisher_cmd = node.create_publisher::<Twist>("md_driver_topic", None)?;
 
 
 
@@ -95,7 +92,6 @@ fn main() -> Result<(), DynError> {
         subscriber,
         publisher_md,
         publisher_msd,
-        publisher_cmd
         
     )?;
     Ok(())
@@ -106,7 +102,6 @@ fn worker(
     subscriber: Subscriber<sensor_msgs::msg::Joy>,
     publisher_md:Publisher<MdLibMsg>,
     publisher_msd:Publisher<msg::Bool>,
-    publisher_cmd:Publisher<Twist>
 ) -> Result<(), DynError> {
     let mut p9n = p9n_interface::PlaystationInterface::new(sensor_msgs::msg::Joy::new().unwrap());
     let _logger = Rc::new(Logger::new("controller_2023"));
@@ -124,15 +119,22 @@ fn worker(
             if !p9n.pressed_r2() {
                 cannon_controller(0,false,&publisher_md);
             }
+            
+
+
 
 
             if p9n.pressed_r1() {
 
-                recovery_controller(450,true,&publisher_md);
+                recovery_controller(450,true,true,&publisher_md);
             }
-            if !p9n.pressed_r1() {
-                recovery_controller(0,false,&publisher_md);
+            else if p9n.pressed_l1() {
+                recovery_controller(450,true,false,&publisher_md);
             }
+            else if !p9n.pressed_l1() && !p9n.pressed_r1() {
+                recovery_controller(0,false,false,&publisher_md);
+            }
+
 
 
 
@@ -161,15 +163,6 @@ fn worker(
 
 
 
-            if p9n.pressed_dpad_right(){
-
-                omni_control_earthquake(earthquake_state,500.,&publisher_cmd);
-
-            }
-            if !p9n.pressed_dpad_right(){
-                // omni_control_earthquake(450.,&publisher_md);
-            }
-
 
 
         }),
@@ -195,10 +188,10 @@ fn cannon_controller(power:u16,mode:bool,publisher_md:&Publisher<MdLibMsg>){
 }
 
 
-fn recovery_controller(power:u16,mode:bool,publisher_md:&Publisher<MdLibMsg>){
+fn recovery_controller(power:u16,mode:bool,phase:bool,publisher_md:&Publisher<MdLibMsg>){
 
     if mode {
-        send_pwm(RECOVERY,0,true,power,&publisher_md);
+        send_pwm(RECOVERY,0,phase,power,&publisher_md);
         return;
 
     }
@@ -227,26 +220,7 @@ fn charge_contorller(publisher_msd:&Publisher<msg::Bool>){
     publisher_msd.send(&msg).unwrap()
 }
 
-// // これは機械の問題で本体を揺らす必要があったからです。
-// fn omni_control_earthquake(_power:f64,publisher:&Publisher<MdLibMsg>){
-    
-//     let mut motor_power:[f64;4] = [0.;4];
-//     motor_power[CHASSIS.fr.id] = -( _power as f64 * CHASSIS.fr.raito ); 
-//     motor_power[CHASSIS.bl.id] =    _power as f64 * CHASSIS.bl.raito  ;
-//     motor_power[CHASSIS.fl.id] = -( _power as f64 * CHASSIS.fl.raito );
-//     motor_power[CHASSIS.br.id] =    _power as f64 * CHASSIS.br.raito  ;
 
-//     for i in 0..motor_power.len() {        
-//         send_pwm(i as u8,0,motor_power[i]>0.,motor_power[i] as u16,publisher);
-//     }
-
-// }
-
-fn omni_control_earthquake(lr:bool,power:f64,publisher:&Publisher<Twist>) -> bool{
-    // 
-    send_twist(0., 0., {if lr {power}else {-power}}, publisher);
-    !lr
-}
 
 fn send_pwm(_address:u8, _semi_id:u8,_phase:bool,_power:u16,publisher_md:&Publisher<MdLibMsg>){
     let mut msg = drobo_interfaces::msg::MdLibMsg::new().unwrap();
@@ -260,12 +234,3 @@ fn send_pwm(_address:u8, _semi_id:u8,_phase:bool,_power:u16,publisher_md:&Publis
 
 }
 
-fn send_twist(_x:f64,_y:f64,_z:f64, publisher:&Publisher<Twist>){
-    let mut msg = Twist::new().unwrap();
-
-    msg.angular.z = _z;
-    msg.linear.x  = _x;
-    msg.linear.y  = _y;
-
-
-}
