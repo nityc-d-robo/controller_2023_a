@@ -12,6 +12,7 @@ use safe_drive::{
     service::client::Client,
     topic::{publisher::{self, Publisher}, subscriber::Subscriber},
     RecvResult,
+    msg::common_interfaces::geometry_msgs::msg::Twist
 };
 use crate::std_msgs::msg;
 use std::{rc::Rc, time::Duration};
@@ -25,6 +26,38 @@ enum CANNON {
 const RECOVERY:u8 = 6;
 const ISOLATION:u8 = 7;
 const _CHARGE:u8 = 8;
+
+struct Tire{
+    id:usize,
+    raito:f64
+}
+
+struct  Chassis {
+    fl:Tire,
+    fr:Tire,
+    br:Tire, 
+    bl:Tire,
+}
+
+const CHASSIS:Chassis = Chassis{
+    fl:Tire{
+        id:0,
+        raito:1.
+    },
+    fr:Tire{
+        id:1,
+        raito:1.
+    },
+    br:Tire{
+        id:2,
+        raito:1.
+    },
+    bl:Tire{
+        id:3,
+        raito:1.
+    }
+};
+
 
 
 pub mod DualsenseState {
@@ -53,6 +86,7 @@ fn main() -> Result<(), DynError> {
     let subscriber = node.create_subscriber::<sensor_msgs::msg::Joy>("joy", None)?;
     let publisher_msd = node.create_publisher::<msg::Bool>("servo_atonement_topic", None)?;
     let publisher_md = node.create_publisher::<drobo_interfaces::msg::MdLibMsg>("md_driver_topic", None)?;
+    let publisher_cmd = node.create_publisher::<Twist>("md_driver_topic", None)?;
 
 
 
@@ -60,7 +94,8 @@ fn main() -> Result<(), DynError> {
         selector,
         subscriber,
         publisher_md,
-        publisher_msd
+        publisher_msd,
+        publisher_cmd
         
     )?;
     Ok(())
@@ -70,12 +105,14 @@ fn worker(
     mut selector: Selector,
     subscriber: Subscriber<sensor_msgs::msg::Joy>,
     publisher_md:Publisher<MdLibMsg>,
-    publisher_msd:Publisher<msg::Bool>
+    publisher_msd:Publisher<msg::Bool>,
+    publisher_cmd:Publisher<Twist>
 ) -> Result<(), DynError> {
     let mut p9n = p9n_interface::PlaystationInterface::new(sensor_msgs::msg::Joy::new().unwrap());
     let _logger = Rc::new(Logger::new("controller_2023"));
 
     let mut charge_state = true;
+    let mut earthquake_state = true;
     selector.add_subscriber(
         subscriber,
         Box::new(move |_msg| {
@@ -120,9 +157,18 @@ fn worker(
             }
             if !p9n.pressed_dpad_left(){
                 charge_state = true;
-
             }
 
+
+
+            if p9n.pressed_dpad_right(){
+
+                omni_control_earthquake(earthquake_state,500.,&publisher_cmd);
+
+            }
+            if !p9n.pressed_dpad_right(){
+                // omni_control_earthquake(450.,&publisher_md);
+            }
 
 
 
@@ -181,6 +227,26 @@ fn charge_contorller(publisher_msd:&Publisher<msg::Bool>){
     publisher_msd.send(&msg).unwrap()
 }
 
+// // これは機械の問題で本体を揺らす必要があったからです。
+// fn omni_control_earthquake(_power:f64,publisher:&Publisher<MdLibMsg>){
+    
+//     let mut motor_power:[f64;4] = [0.;4];
+//     motor_power[CHASSIS.fr.id] = -( _power as f64 * CHASSIS.fr.raito ); 
+//     motor_power[CHASSIS.bl.id] =    _power as f64 * CHASSIS.bl.raito  ;
+//     motor_power[CHASSIS.fl.id] = -( _power as f64 * CHASSIS.fl.raito );
+//     motor_power[CHASSIS.br.id] =    _power as f64 * CHASSIS.br.raito  ;
+
+//     for i in 0..motor_power.len() {        
+//         send_pwm(i as u8,0,motor_power[i]>0.,motor_power[i] as u16,publisher);
+//     }
+
+// }
+
+fn omni_control_earthquake(lr:bool,power:f64,publisher:&Publisher<Twist>) -> bool{
+    // 
+    send_twist(0., 0., {if lr {power}else {-power}}, publisher);
+    !lr
+}
 
 fn send_pwm(_address:u8, _semi_id:u8,_phase:bool,_power:u16,publisher_md:&Publisher<MdLibMsg>){
     let mut msg = drobo_interfaces::msg::MdLibMsg::new().unwrap();
@@ -191,5 +257,15 @@ fn send_pwm(_address:u8, _semi_id:u8,_phase:bool,_power:u16,publisher_md:&Publis
     msg.power = _power as u16;
 
     publisher_md.send(&msg).unwrap()
+
+}
+
+fn send_twist(_x:f64,_y:f64,_z:f64, publisher:&Publisher<Twist>){
+    let mut msg = Twist::new().unwrap();
+
+    msg.angular.z = _z;
+    msg.linear.x  = _x;
+    msg.linear.y  = _y;
+
 
 }

@@ -9,6 +9,7 @@ edition = "2021"
 safe_drive = "0.2"
 drobo_interfaces = { path = "/tmp/2023_controller_a/drobo_interfaces" }
 
+
 [package.metadata.ros]
 msg = ["drobo_interfaces"]
 msg_dir = "/tmp/2023_controller_a/"
